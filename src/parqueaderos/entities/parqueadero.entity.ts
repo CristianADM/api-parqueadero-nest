@@ -1,5 +1,5 @@
-import { ParqueaderoVehiculo } from 'src/parqueadero-vehiculos/entities/parqueadero-vehiculo.entity';
-import { Column, CreateDateColumn, Entity, JoinColumn, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Usuario } from '../../usuarios/entities/usuario.entity';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity()
 export class Parqueadero {
@@ -28,6 +28,10 @@ export class Parqueadero {
   @UpdateDateColumn({name: "fecha_modificacion"})
   fechaModificacion: Date;
 
-  @OneToMany(() => ParqueaderoVehiculo, (parqueaderoVehiculo) => parqueaderoVehiculo.parqueadero)
-  parqueaderoVehiculos: ParqueaderoVehiculo[];
+  @ManyToOne(() => Usuario)
+  @JoinColumn({name: 'id_usuario'})
+  usuario: Usuario;
+
+  @Column({name: 'id_usuario'})
+  idUsuario: number
 }

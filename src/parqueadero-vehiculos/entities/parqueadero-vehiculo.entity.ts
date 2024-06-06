@@ -1,4 +1,4 @@
-import { Parqueadero } from "src/parqueaderos/entities/parqueadero.entity";
+import { Parqueadero } from "../../parqueaderos/entities/parqueadero.entity";
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity()
@@ -7,7 +7,7 @@ export class ParqueaderoVehiculo {
     @PrimaryGeneratedColumn({name: "id_parqueadero_vehiculo"})
     idParqueaderoVehiculo: number;
 
-    @ManyToOne(() => Parqueadero, (parqueadero) => parqueadero.parqueaderoVehiculos)
+    @ManyToOne(() => Parqueadero)
     @JoinColumn({name: "id_parqueadero"})
     parqueadero: Parqueadero;
 

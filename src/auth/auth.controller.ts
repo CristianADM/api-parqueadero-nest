@@ -1,19 +1,15 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UsuarioRegistroDto } from './dto/usuario-registro.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthGuard } from './guard/auth.guard';
-import { Request } from 'express';
-import { RolesGuard } from './guard/roles.guard';
-import { Roles } from './decorators/roles.decorator';
+import { Rol } from '../common/enums/rol.enum'; 
+import { Auth } from './decorators/auth.decorator';
+import { ActiveUser } from '../common/decorators/active-user.decorator';
+import { IUsuarioActivo } from '../common/interfaces/user-active.interfaces';
+import { ExisteUsuarioPipe } from '../usuarios/pipe/existe-usuario.pipe';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
-interface RequestWithUser extends Request {
-    usuario: {
-        correo: string;
-        rol: string;
-    }
-}
-
+@ApiTags('Autenticacion')
 @Controller('auth')
 export class AuthController {
 
@@ -21,20 +17,25 @@ export class AuthController {
         private readonly authService: AuthService
     ) {}
 
-    @Post('/registro-usuarios')
-    registroUsuarios(@Body() usuarioRegistroDto: UsuarioRegistroDto) {
+    @ApiOperation({ summary: 'Registrar un socio - Administrador' })
+    @ApiBearerAuth()
+    @Post('/registro-socios')
+    @Auth([Rol.ADMIN])
+    registroUsuarios(@Body(ExisteUsuarioPipe) usuarioRegistroDto: UsuarioRegistroDto) {
         return this.authService.registroUsuarios(usuarioRegistroDto);
     }
 
+    @ApiOperation({ summary: 'Realizar inicio de sesión - Administrador/Socio' })
     @Post('/login')
     login(@Body() loginDto: LoginDto) {
         return this.authService.login(loginDto);
     }
 
-    @Get('usuarios')
-    @Roles('ADMIN')
-    @UseGuards(AuthGuard, RolesGuard)
-    listaUsuarios(@Req() request: RequestWithUser) {
-        return this.authService.profile(request.usuario);
+    @ApiOperation({ summary: 'Finalizar la sesión - Administrador/Socio' })
+    @ApiBearerAuth()
+    @Post('/logout')
+    @Auth([Rol.ADMIN, Rol.SOCIO])
+    logout(@ActiveUser() usuario: IUsuarioActivo) {
+        return this.authService.logout(usuario);
     }
 }

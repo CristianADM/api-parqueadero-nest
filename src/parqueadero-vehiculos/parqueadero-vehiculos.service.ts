@@ -1,59 +1,63 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException, forwardRef } from '@nestjs/common';
 import { CreateParqueaderoVehiculoDto } from './dto/create-parqueadero-vehiculo.dto';
 import { UpdateParqueaderoVehiculoDto } from './dto/update-parqueadero-vehiculo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ParqueaderoVehiculo } from './entities/parqueadero-vehiculo.entity';
-import { Repository } from 'typeorm';
-import { Parqueadero } from 'src/parqueaderos/entities/parqueadero.entity';
+import { Between, Like, Repository } from 'typeorm';
+import { ESTADOS, ESTADOSSTRING, RANGOTIEMPO } from '../common/constantes/constantes';
+import { ParqueaderosService } from '../parqueaderos/parqueaderos.service';
+import { IUsuarioActivo } from '../common/interfaces/user-active.interfaces';
+import { Rol } from '../common/enums/rol.enum';
 
 @Injectable()
 export class ParqueaderoVehiculosService {
 
   constructor(
     @InjectRepository(ParqueaderoVehiculo) private readonly parqueaderoVehiculoRepository: Repository<ParqueaderoVehiculo>,
-    @InjectRepository(Parqueadero) private readonly parqueaderoRepository: Repository<Parqueadero>
+    @Inject(forwardRef(() => ParqueaderosService))
+    private parqueaderoService: ParqueaderosService,
   ) { }
 
-  async registroIngreso(createParqueaderoVehiculoDto: CreateParqueaderoVehiculoDto) {
+  async registroIngreso(usuario: IUsuarioActivo, createParqueaderoVehiculoDto: CreateParqueaderoVehiculoDto) {
 
-    const parqueadero = await this.parqueaderoRepository.findOneBy({
-      idParqueadero: createParqueaderoVehiculoDto.idParqueadero,
-      estadoActivo: true
-    });
+    const existeParqueadero = await this.parqueaderoService.consultarParqueaderoPorId(createParqueaderoVehiculoDto.idParqueadero);
 
-    if(!parqueadero) {
-      throw new NotFoundException("No existe parqueadero registrado con ese IdParqueadero");
+    if(existeParqueadero.idUsuario !== usuario.idUsuario) {
+      throw new UnauthorizedException('No tiene acceso a este parqueadero');
     }
 
     const parqueaderoVehiculo = this.parqueaderoVehiculoRepository.create({
-      parqueadero,
+      parqueadero: existeParqueadero,
       ...createParqueaderoVehiculoDto
     });
+    
     parqueaderoVehiculo.fechaIngreso = new Date();
-    return await this.parqueaderoVehiculoRepository.save(parqueaderoVehiculo);
+    const {parqueadero, ...vehiculo} = await this.parqueaderoVehiculoRepository.save(parqueaderoVehiculo);
+
+    this.parqueaderoService.restarEspcioDisponible(existeParqueadero.idParqueadero);
+
+    return vehiculo;
   }
 
-  async findAll() {
-    return this.parqueaderoVehiculoRepository.find();
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} parqueaderoVehiculo`;
-  }
-
-  update(id: number, updateParqueaderoVehiculoDto: UpdateParqueaderoVehiculoDto) {
-    return `This action updates a #${id} parqueaderoVehiculo`;
+  async cantidadVehiculosActivosPorIdParqueadero(idParqueadero: number) {
+    return await this.parqueaderoVehiculoRepository.countBy({
+      parqueadero: {
+        idParqueadero
+      },
+      estadoActivo: ESTADOS.ACTIVO
+    });
   }
   
-  async salidaVehiculo(updateParqueaderoVehiculoDto: UpdateParqueaderoVehiculoDto) {
+  async salidaVehiculo(usuario: IUsuarioActivo, updateParqueaderoVehiculoDto: UpdateParqueaderoVehiculoDto) {
 
-    const parqueadero = await this.parqueaderoRepository.findOneBy({
-      idParqueadero: updateParqueaderoVehiculoDto.idParqueadero,
-      estadoActivo: true
-    });
+    const parqueadero = await this.parqueaderoService.consultarParqueaderoPorId(updateParqueaderoVehiculoDto.idParqueadero);
 
     if(!parqueadero) {
-      throw new NotFoundException("No existe parqueadero con ese idParqueadero.");
+      throw new NotFoundException("No existe parqueadero con ese idParqueadero");
+    }
+
+    if(parqueadero.idUsuario !== usuario.idUsuario) {
+      throw new UnauthorizedException('No tiene acceso a este parqueadero');
     }
     
     const vehiculo = await this.parqueaderoVehiculoRepository.findOne({
@@ -66,11 +70,8 @@ export class ParqueaderoVehiculosService {
       },
     });
 
-    console.log(parqueadero)
-    console.log(vehiculo)
-
     if(!vehiculo) {
-      throw new NotFoundException("El vehiculo no esta registrado en este parqueadero.");
+      throw new NotFoundException("El vehículo no está registrado en este parqueadero");
     }
 
     vehiculo.estadoActivo = false;
@@ -79,10 +80,217 @@ export class ParqueaderoVehiculosService {
 
     vehiculo.valorTiempo = horasParqueado * parqueadero.valorHora;
 
-    return await this.parqueaderoVehiculoRepository.update(vehiculo.idParqueaderoVehiculo, vehiculo);
+    this.parqueaderoService.sumarEspcioDisponible(parqueadero.idParqueadero);
+
+    return await this.parqueaderoVehiculoRepository.save(vehiculo);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} parqueaderoVehiculo`;
+  async consultarVehiculosMasRegistradosGeneral(usuario: IUsuarioActivo) {
+
+    if(usuario.rol == Rol.ADMIN) {
+      return this.parqueaderoVehiculoRepository
+        .createQueryBuilder('vp')
+        .select('vp.placaVehiculo', 'PlacaVehiculo')
+        .addSelect('COUNT(*)', 'cantidadIngresos')
+        .groupBy('vp.placaVehiculo')
+        .orderBy('cantidadIngresos', 'DESC')
+        .limit(10) // Puedes ajustar el límite según tus necesidades
+        .getRawMany();
+    } else {
+      return this.parqueaderoVehiculoRepository
+        .createQueryBuilder('vp')
+        .select('vp.placaVehiculo', 'PlacaVehiculo')
+        .innerJoin("vp.parqueadero", "p")
+        .where('p.idUsuario = :idUsuario', {idUsuario: usuario.idUsuario})
+        .addSelect('COUNT(*)', 'cantidadIngresos')
+        .groupBy('vp.placaVehiculo')
+        .orderBy('cantidadIngresos', 'DESC')
+        .limit(10) // Puedes ajustar el límite según tus necesidades
+        .getRawMany();
+    }
+  }
+  
+  async consultarVehiculosMasRegistradosPorParqueadero(idParqueadero: number, usuario: IUsuarioActivo) {
+
+    const parqueadero = await this.parqueaderoService.consultarParqueaderoPorId(idParqueadero);
+
+    if(usuario.rol === Rol.SOCIO && parqueadero.idUsuario !== usuario.idUsuario) {
+      throw new BadRequestException('No tiene acceso a este parqueadero');
+    }
+
+    return this.parqueaderoVehiculoRepository
+        .createQueryBuilder('vp')
+        .select('vp.placaVehiculo', 'PlacaVehiculo')
+        .innerJoin("vp.parqueadero", "p")
+        .where('p.idParqueadero = :idParqueadero', {idParqueadero})
+        .addSelect('COUNT(*)', 'cantidadIngresos')
+        .groupBy('vp.placaVehiculo')
+        .orderBy('cantidadIngresos', 'DESC')
+        .limit(10) // Puedes ajustar el límite según tus necesidades
+        .getRawMany();
+  }
+  
+  async consultarVehiculosPrimeraVezPorParqueadero(idParqueadero: number, usuario: IUsuarioActivo) {
+
+    const parqueadero = await this.parqueaderoService.consultarParqueaderoPorId(idParqueadero);
+
+    if(usuario.rol === Rol.SOCIO && parqueadero.idUsuario !== usuario.idUsuario) {
+      throw new BadRequestException('No tiene acceso a este parqueadero');
+    }
+
+    return this.parqueaderoVehiculoRepository
+        .createQueryBuilder('vp')
+        .select("vp.placaVehiculo", 'placaVehiculo')
+        .innerJoin("vp.parqueadero", "p")
+        .where('p.idParqueadero = :idParqueadero', {idParqueadero})
+        .groupBy('vp.placaVehiculo')
+        .having('COUNT(vp.placaVehiculo) = 1')
+        .getRawMany();
+  }
+  
+  async consultarGanaciasPorParqueadero(idParqueadero: number, usuario: IUsuarioActivo, rangoTiempo: string) {
+
+    const parqueadero = await this.parqueaderoService.consultarParqueaderoPorId(idParqueadero);
+
+    if(parqueadero.idUsuario !== usuario.idUsuario) {
+      throw new UnauthorizedException('No tiene acceso a este parqueadero');
+    }
+
+    // Obtener la fecha de hoy
+    const fechaHoy = new Date();
+
+    let fechaInicio = new Date();
+    fechaInicio.setHours(0, 0, 0, 0);
+    let fechaFin = new Date();
+    fechaFin.setHours(23, 59, 59, 999);
+
+    if(rangoTiempo == RANGOTIEMPO.semana) {
+
+      fechaInicio.setDate(fechaInicio.getDate() - 6);
+      fechaFin = new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), fechaHoy.getDate(), 23, 59, 59, 999); // Fin del día de hoy
+
+    } else if(rangoTiempo == RANGOTIEMPO.mes) {
+        
+      // Primer día del mes actual
+      fechaInicio.setDate(1); 
+        
+      fechaFin = new Date(fechaInicio);
+      // Primer día del próximo mes
+      fechaFin.setMonth(fechaFin.getMonth() + 1);
+
+    } else if(rangoTiempo == RANGOTIEMPO.año) {
+        // Primer día del año actual
+        fechaInicio = new Date(new Date().getFullYear(), 0, 1);
+        
+        // Último día del año actual
+        fechaFin = new Date(new Date().getFullYear() + 1, 0, 1);
+    }
+
+    const ganancias = await this.parqueaderoVehiculoRepository.sum("valorTiempo", {
+      fechaCreacion: Between(fechaInicio, fechaFin),
+      estadoActivo: ESTADOS.INACTIVO,
+      parqueadero: {
+        idParqueadero: idParqueadero
+      }
+    });
+
+    return (ganancias) ? ganancias : 0;
+  }
+  
+  async consultarVehiculoPorPlaca(placa: string, usuario: IUsuarioActivo) {
+
+    let vehiculos = [];
+    if(usuario.rol == Rol.ADMIN) {
+      vehiculos = await this.parqueaderoVehiculoRepository.find({
+        relations: {
+          parqueadero: true
+        },
+        select: {
+          parqueadero: {
+            idParqueadero: true
+          }
+        },
+        where: {
+          placaVehiculo: Like(`%${placa}%`)
+        }
+      });
+    } else {
+      vehiculos = await this.parqueaderoVehiculoRepository.find({
+        relations: {
+          parqueadero: true
+        },
+        select: {
+          parqueadero: {
+            idParqueadero: true
+          }
+        },
+        where: {
+          placaVehiculo: Like(`%${placa}%`),
+          parqueadero: {
+            idUsuario: usuario.idUsuario
+         }
+        }
+      });
+    }
+    return {vehiculos}
+  }
+  
+  async consultarVehiculoPorPlacaPipe(placa: string) {
+    return await this.parqueaderoVehiculoRepository.findOne({
+      where: {
+        placaVehiculo: placa,
+        estadoActivo: ESTADOS.ACTIVO
+      },
+      relations: {
+        parqueadero:true
+      },
+      select: {
+        parqueadero: {
+          idParqueadero: true
+        }
+      }
+    });
+  }
+
+  async consultarVehiculoPorParqueaderos(idParqueadero: number, estadoActivo: string, usuario: IUsuarioActivo) {
+
+    const parqueadero = await this.parqueaderoService.consultarParqueaderoPorId(idParqueadero);
+
+    if(usuario.rol === Rol.SOCIO && parqueadero.idUsuario != usuario.idUsuario) {
+      throw new UnauthorizedException("No tiene acceso a este parqueadero");
+    }
+
+    let vehiculos = [];
+    let donde: any = {
+      parqueadero: {
+        idParqueadero: idParqueadero
+      }
+    };
+
+    if(estadoActivo) {
+      if(estadoActivo == ESTADOSSTRING.ACTIVO) {
+        donde.estadoActivo = ESTADOS.ACTIVO;
+      } else {
+        donde.estadoActivo = ESTADOS.INACTIVO;
+      }
+    }
+
+    if(usuario.rol == Rol.SOCIO) {
+      donde.parqueadero.idUsuario = usuario.idUsuario
+    }
+
+    vehiculos = await this.parqueaderoVehiculoRepository.find({
+      relations: {
+        parqueadero: true
+      },
+      select: {
+        parqueadero: {
+          idParqueadero: true
+        }
+      },
+      where: donde
+    });
+    
+    return {vehiculos}
   }
 }

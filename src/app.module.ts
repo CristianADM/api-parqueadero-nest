@@ -5,6 +5,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ParqueaderoVehiculosModule } from './parqueadero-vehiculos/parqueadero-vehiculos.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { AuthModule } from './auth/auth.module';
+import { IndicadoresModule } from './indicadores/indicadores.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -25,7 +27,9 @@ import { AuthModule } from './auth/auth.module';
     ParqueaderosModule,
     ParqueaderoVehiculosModule,
     UsuariosModule,
-    AuthModule],
+    AuthModule,
+    IndicadoresModule,
+    EmailModule],
   controllers: [],
   providers: [],
 })

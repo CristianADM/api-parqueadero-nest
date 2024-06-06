@@ -1,14 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ParqueaderoVehiculosService } from './parqueadero-vehiculos.service';
 import { ParqueaderoVehiculosController } from './parqueadero-vehiculos.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ParqueaderoVehiculo } from './entities/parqueadero-vehiculo.entity';
-import { ParqueaderosModule } from 'src/parqueaderos/parqueaderos.module';
-import { ParqueaderosService } from 'src/parqueaderos/parqueaderos.service';
+import { ParqueaderosModule } from '../parqueaderos/parqueaderos.module';
+import { UsuariosModule } from '../usuarios/usuarios.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ParqueaderoVehiculo]), ParqueaderosModule],
+  imports: [TypeOrmModule.forFeature([ParqueaderoVehiculo]), 
+  forwardRef(() => ParqueaderosModule),
+  UsuariosModule],
   controllers: [ParqueaderoVehiculosController],
-  providers: [ParqueaderoVehiculosService, ParqueaderosService],
+  providers: [ParqueaderoVehiculosService],
+  exports: [ParqueaderoVehiculosService]
 })
 export class ParqueaderoVehiculosModule {}

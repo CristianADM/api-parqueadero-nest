@@ -1,3 +1,4 @@
+import { Rol } from "../../common/enums/rol.enum";
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity()
@@ -12,11 +13,14 @@ export class Usuario {
     @Column()
     nombre: string;
 
-    @Column({nullable: false})
+    @Column({select: false, nullable: false})
     contrasenna: string;
 
-    @Column({default: 'USUARIO'})
+    @Column({type: 'enum', default: Rol.SOCIO, enum: Rol})
     rol: string;
+    
+    @Column({nullable: true})
+    token: string;
 
     @Column({name: 'estado_activo', default: true})
     estadoActivo: boolean;

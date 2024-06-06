@@ -24,17 +24,41 @@ export class UsuariosService {
     });
   }
 
-  findAll() {
-    return `This action returns all usuarios`;
+  async consultarUsuarioPorIdYEstado(idUsuario: number, estado: boolean) {
+    return await this.usuarioRepository.findOneBy({
+      idUsuario,
+      estadoActivo: estado
+    });
   }
-
   
-
-  update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
-    return `This action updates a #${id} usuario`;
+  async buscarPorCorreoConContrasenna(correo: string) {
+    return await this.usuarioRepository.findOne({
+      where: {
+        correo,
+        estadoActivo: true
+      },
+      select: ['idUsuario', 'correo', 'contrasenna', 'rol']
+    });
   }
-
-  remove(id: number) {
-    return `This action removes a #${id} usuario`;
+  
+  async consultarUsuarioPorToken(token: string) {
+    return await this.usuarioRepository.findOne({
+      where: {
+        token,
+        estadoActivo: true
+      }
+    });
+  }
+  
+  async registrarToken(idUsuario, token: string) {
+    return await this.usuarioRepository.update(idUsuario, {
+      token: token
+    });
+  }
+  
+  async eliminarToken(idUsuario) {
+    return await this.usuarioRepository.update(idUsuario, {
+      token: null
+    });
   }
 }
