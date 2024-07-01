@@ -5,7 +5,7 @@ import { UsuariosModule } from '../usuarios/usuarios.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
 
-import 'dotenv/config'
+import 'dotenv/config';
 
 @Module({
   imports: [

@@ -12,7 +12,7 @@ export class RolesGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
 
-    const roles: string[] = this.relfector .getAllAndOverride<Rol[]>(ROLES_KEY,
+    const roles: string[] = this.relfector.getAllAndOverride<Rol[]>(ROLES_KEY,
       [
         context.getHandler(),
         context.getClass()

@@ -43,7 +43,7 @@ export class AuthService {
 
         const token = await this.jwtService.signAsync(payload);
 
-        console.log(await this.usuarioService.registrarToken(usuario.idUsuario, token));
+        await this.usuarioService.registrarToken(usuario.idUsuario, token);
 
         return {token};
     }
